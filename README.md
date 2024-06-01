@@ -16,7 +16,7 @@ import (
 func main() {
 	router := rt.NewRouter()
 
-	r.HandleFunc("GET /hello", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /hello", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("world!"))
 	})
 
