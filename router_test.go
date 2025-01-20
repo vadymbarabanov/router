@@ -12,38 +12,33 @@ import (
 
 type route struct {
 	pattern    string
-	handler    http.Handler
+	handler    http.HandlerFunc
 	statusCode int
 	headers    map[string]string
 	body       string
 }
 
-type group struct {
-	middlewares []func(http.Handler) http.Handler
-	routes      []route
-}
-
 func TestRouter_Middlewares(t *testing.T) {
 	testCases := []struct {
 		testname    string
-		middlewares []func(http.Handler) http.Handler
+		middlewares []func(http.HandlerFunc) http.HandlerFunc
 		routes      []route
 	}{
 		{
 			testname: "middleware applies header",
-			middlewares: []func(http.Handler) http.Handler{
-				func(next http.Handler) http.Handler {
-					return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			middlewares: []func(http.HandlerFunc) http.HandlerFunc{
+				func(next http.HandlerFunc) http.HandlerFunc {
+					return func(w http.ResponseWriter, r *http.Request) {
 						w.Header().Set("X-Test-Middleware", "test")
-						next.ServeHTTP(w, r)
-					})
+						next(w, r)
+					}
 				},
 			},
 			routes: []route{{
 				pattern: "/test",
-				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				handler: func(w http.ResponseWriter, r *http.Request) {
 					w.Write([]byte("test"))
-				}),
+				},
 				statusCode: http.StatusOK,
 				headers: map[string]string{
 					"X-Test-Middleware": "test",
@@ -53,25 +48,25 @@ func TestRouter_Middlewares(t *testing.T) {
 		},
 		{
 			testname: "middlewares execute in correct order",
-			middlewares: []func(http.Handler) http.Handler{
-				func(next http.Handler) http.Handler {
-					return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			middlewares: []func(http.HandlerFunc) http.HandlerFunc{
+				func(next http.HandlerFunc) http.HandlerFunc {
+					return func(w http.ResponseWriter, r *http.Request) {
 						w.Header().Set("X-Test-Middleware", "test-1")
-						next.ServeHTTP(w, r)
-					})
+						next(w, r)
+					}
 				},
-				func(next http.Handler) http.Handler {
-					return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				func(next http.HandlerFunc) http.HandlerFunc {
+					return func(w http.ResponseWriter, r *http.Request) {
 						w.Header().Set("X-Test-Middleware", "test-2")
-						next.ServeHTTP(w, r)
-					})
+						next(w, r)
+					}
 				},
 			},
 			routes: []route{{
 				pattern: "/test",
-				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				handler: func(w http.ResponseWriter, r *http.Request) {
 					w.Write([]byte("test"))
-				}),
+				},
 				statusCode: http.StatusOK,
 				headers: map[string]string{
 					"X-Test-Middleware": "test-2",
@@ -102,6 +97,11 @@ func TestRouter_Middlewares(t *testing.T) {
 	}
 }
 
+type group struct {
+	middlewares []func(http.HandlerFunc) http.HandlerFunc
+	routes      []route
+}
+
 func TestRouter_Groups(t *testing.T) {
 	testCases := []struct {
 		testname string
@@ -112,9 +112,9 @@ func TestRouter_Groups(t *testing.T) {
 			testname: "group middleware execute on group routes only",
 			routes: []route{{
 				pattern: "/test-1",
-				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				handler: func(w http.ResponseWriter, r *http.Request) {
 					w.Write([]byte("test-1"))
-				}),
+				},
 				statusCode: http.StatusOK,
 				body:       "test-1",
 				headers: map[string]string{
@@ -122,20 +122,20 @@ func TestRouter_Groups(t *testing.T) {
 				},
 			}},
 			groups: []group{{
-				middlewares: []func(http.Handler) http.Handler{
-					func(http.Handler) http.Handler {
-						return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				middlewares: []func(http.HandlerFunc) http.HandlerFunc{
+					func(http.HandlerFunc) http.HandlerFunc {
+						return func(w http.ResponseWriter, r *http.Request) {
 							w.Header().Set("X-Test-1", "test-1")
 							http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 							return
-						})
+						}
 					},
 				},
 				routes: []route{{
 					pattern: "/test-1/header",
-					handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					handler: func(w http.ResponseWriter, r *http.Request) {
 						w.Write([]byte("test-1 header"))
-					}),
+					},
 					statusCode: http.StatusUnauthorized,
 					headers: map[string]string{
 						"X-Test-1": "test-1",

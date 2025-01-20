@@ -7,38 +7,38 @@ import (
 
 type route struct {
 	pattern string
-	handler http.Handler
+	handler http.HandlerFunc
 }
 
 type Router struct {
 	routes      []*route
-	middlewares []func(http.Handler) http.Handler
+	middlewares []func(http.HandlerFunc) http.HandlerFunc
 	subrouters  []*Router
 }
 
 func NewRouter() *Router {
 	return &Router{
 		routes:      make([]*route, 0),
-		middlewares: make([]func(http.Handler) http.Handler, 0),
+		middlewares: make([]func(http.HandlerFunc) http.HandlerFunc, 0),
 		subrouters:  make([]*Router, 0),
 	}
 }
 
-func (r *Router) Use(middleware func(http.Handler) http.Handler) {
+func (r *Router) Use(middleware func(http.HandlerFunc) http.HandlerFunc) {
 	r.middlewares = append(r.middlewares, middleware)
 }
 
 func (r *Router) Handle(pattern string, handler http.Handler) {
 	r.routes = append(r.routes, &route{
 		pattern: pattern,
-		handler: handler,
+		handler: handler.ServeHTTP,
 	})
 }
 
-func (r *Router) HandleFunc(pattern string, handler func(w http.ResponseWriter, r *http.Request)) {
+func (r *Router) HandleFunc(pattern string, handler http.HandlerFunc) {
 	route := &route{
 		pattern: pattern,
-		handler: http.HandlerFunc(handler),
+		handler: handler,
 	}
 	r.routes = append(r.routes, route)
 }
@@ -56,12 +56,12 @@ func (r *Router) Mount(subrouter *Router) {
 func (r *Router) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
 
-	r.applyHandlers(mux, make([]func(http.Handler) http.Handler, 0))
+	r.applyHandlers(mux, make([]func(http.HandlerFunc) http.HandlerFunc, 0))
 
 	return mux
 }
 
-func (r *Router) applyHandlers(mux *http.ServeMux, middlewares []func(http.Handler) http.Handler) {
+func (r *Router) applyHandlers(mux *http.ServeMux, middlewares []func(http.HandlerFunc) http.HandlerFunc) {
 	middlewares = slices.Concat(middlewares, r.middlewares)
 
 	for _, route := range r.routes {
