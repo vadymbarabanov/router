@@ -1,15 +1,76 @@
-# `net/http.ServeMux` wrapper with middlewares utils
+# `router` 
 
-`router` is `net/http.ServeMux` wrapper which provides several methods to organize middlewares.
+Simple golang http router with middlewares
 
-## Example Usage
+## Features
+
+- [`router.Use(middleware)`](#middleware)
+- [`router.Group(func(subrouter))`](#group)
+- [`router.Mount(subrouter)`](#sub-router)
+
+## Usage
+
+### Middleware
 
 ```go
 package main
 
 import (
 	"net/http"
+	rt "github.com/vadymbarabanov/router"
+)
 
+func main() {
+	router := rt.NewRouter()
+
+	router.Use(func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("%s %s %s", r.Method, r.Proto, r.URL.Path)
+			next(w, r)
+		}
+	})
+
+	router.HandleFunc("GET /hello", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("world!"))
+	})
+
+	http.ListenAndServe(":4000", router.Mux())
+}
+```
+
+### Group
+
+```go
+package main
+
+import (
+	"net/http"
+	rt "github.com/vadymbarabanov/router"
+)
+
+func main() {
+	router := rt.NewRouter()
+
+	router.Group(func(g *rt.Router) {
+		g.Use(customGroupMiddleware) // group scoped middleware
+
+		g.HandleFunc("GET /group-route", func(w http.ResponseWriter, r *http.Request) { /* ... */ })
+
+		g.Group(func(g *rt.Router) { /* ... */ }) // nested groups
+	})
+
+	http.ListenAndServe(":4000", router.Mux())
+}
+```
+
+
+### Sub-router
+
+```go
+package main
+
+import (
+	"net/http"
 	rt "github.com/vadymbarabanov/router"
 )
 
@@ -20,28 +81,6 @@ func main() {
 		w.Write([]byte("world!"))
 	})
 
-	// middlewares
-	router.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// ...
-			next.ServeHTTP(w, r)
-		})
-	})
-
-	router.Group(func(g *rt.Router) {
-		// group scope middlewares
-		g.Use(customGroupMiddleware)
-
-		g.HandleFunc("GET /group-route", func(w http.ResponseWriter, r *http.Request) {
-			// ...
-		})
-
-		// nested groups
-		g.Group(func(g *rt.Router) {
-			// ...
-		})
-	})
-
 	protectedRouter := rt.NewRouter()
 	protectedRouter.Use(authMiddleware)
 
@@ -49,10 +88,8 @@ func main() {
 		// ...
 	})
 
-	// mount a subrouter
 	router.Mount(protectedRouter)
 
-	// create a serve mux
 	http.ListenAndServe(":4000", router.Mux())
 }
 ```
